@@ -1,0 +1,9 @@
+{
+  "name": "sdlc-graph-ui",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./tui": "./tui.tsx"
+  }
+}

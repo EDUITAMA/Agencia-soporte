@@ -1,0 +1,6 @@
+{
+  "deployUrl": "TODO_DEPLOY_URL",
+  "deployToken": "TODO_DEPLOY_TOKEN",
+  "deployCertificate": "TODO_DEPLOY_CERTIFICATE",
+  "backendStartCommand": "TODO_BACKEND_START_COMMAND"
+}

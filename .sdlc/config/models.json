@@ -1,0 +1,31 @@
+{
+  "_instructions": "AXET-only capability routing. Every role is pinned to an explicit axet/provider model reference. opencode.jsonc.agent is authoritative for native task delegation; frontmatter is kept synchronized for direct launches.",
+  "_resolution": "explicit-axet-model-reference",
+  "_strictNoFallback": true,
+  "_independenceRule": "Developer, reviewer/security and final judge intentionally use different model families where possible.",
+  "sdlc-orchestrator": "axet/gpt-5.6-terra",
+  "sdlc-repo-scout": "axet/gpt-5.6-luna",
+  "sdlc-direct": "axet/gpt-5.6-luna",
+  "sdlc-requirements": "axet/gpt-5.6-terra",
+  "sdlc-architect": "axet/eu.anthropic.claude-sonnet-5",
+  "sdlc-test-designer": "axet/gpt-5.4-2026-03-05",
+  "sdlc-planner": "axet/gpt-5.6-terra",
+  "sdlc-developer": "axet/gpt-5.3-codex",
+  "sdlc-test-engineer": "axet/gpt-5.4-2026-03-05",
+  "sdlc-reviewer": "axet/eu.anthropic.claude-sonnet-5",
+  "sdlc-security": "axet/eu.anthropic.claude-sonnet-4-6",
+  "sdlc-performance": "axet/gpt-5.4-2026-03-05",
+  "sdlc-devops": "axet/gpt-5.3-codex",
+  "sdlc-docs": "axet/gpt-5.4-mini",
+  "sdlc-debugger": "axet/gpt-5.3-codex",
+  "sdlc-judge": "axet/gpt-5.6-terra",
+  "_executionProfiles": {
+    "FAST_ROUTING": { "model": "axet/gpt-5.6-luna", "agents": ["sdlc-orchestrator", "sdlc-repo-scout"] },
+    "SIMPLE_DIRECT": { "model": "axet/gpt-5.6-luna", "agents": ["sdlc-direct"] },
+    "COMPLEX_CODING": { "model": "axet/gpt-5.3-codex", "agents": ["sdlc-developer", "sdlc-devops", "sdlc-debugger"] },
+    "ARCHITECTURE_REASONING": { "model": "axet/gpt-5.6-terra", "agents": ["sdlc-requirements", "sdlc-planner"] },
+    "REVIEW_VALIDATION": { "model": "axet/eu.anthropic.claude-sonnet-5", "agents": ["sdlc-reviewer"] }
+  },
+  "_provider": "axet",
+  "_timeoutMitigation": "Luna is only used for routing and simple direct work. Native task delegation selects the configured model for each specialist phase."
+}

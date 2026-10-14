@@ -1,0 +1,27 @@
+{
+  "name": "nuevo-proyecto",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": ">=22.22.3 <23",
+    "npm": "10.x"
+  },
+  "scripts": {
+    "dev": "npx -y concurrently -k \"npm run back:dev\" \"npm run front:dev\"",
+    "back:dev": "npm run dev --prefix apps/backend",
+    "front:dev": "npm run dev --prefix apps/frontend",
+    "test:backend": "npm test --prefix apps/backend",
+    "test:frontend": "npm test --prefix apps/frontend/angular-app",
+    "test:all": "npm run test:backend && npm run test:frontend",
+    "back:build": "npm run build --prefix apps/backend",
+    "front:build": "npm run build --prefix apps/frontend",
+    "build:all": "npm run back:build && npm run front:build",
+    "validate": "node scripts/validate-project.mjs",
+    "smoke:backend": "node scripts/smoke-backend-build.mjs",
+    "stop-dev": "node scripts/stop-dev.mjs \"tsx watch\" \"ng serve\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

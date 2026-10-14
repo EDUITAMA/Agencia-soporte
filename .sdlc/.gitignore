@@ -1,0 +1,5 @@
+current-run.json
+backups/
+cache/
+runs/*/evidence/raw/
+runs/*/evidence/tmp/

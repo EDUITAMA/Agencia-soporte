@@ -1,0 +1,20 @@
+div[ref="buttonMessageContainer"] {
+  display: none !important;
+}
+#welcomeLogo {
+  max-width:100%;
+  max-height:100%;
+}
+#poweredByDeptapps {
+  width: 120px;
+}
+
+@media (min-width: 768px) {
+  .sidebar .nav-item .nav-link {
+    width: 100;
+  }
+  #welcomeLogo {
+    max-width:500px;
+    max-height:500px;
+  }
+}

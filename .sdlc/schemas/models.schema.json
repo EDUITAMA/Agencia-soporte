@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/opencode-sdlc/models.schema.json",
+  "title": "OpenCode SDLC model routing",
+  "type": "object",
+  "patternProperties": {
+    "^_": {},
+    "^sdlc-[a-z0-9-]+$": {
+      "type": "string",
+      "anyOf": [
+        {"const": "inherit"},
+        {"pattern": "^\\S+$"}
+      ]
+    }
+  },
+  "additionalProperties": false
+}

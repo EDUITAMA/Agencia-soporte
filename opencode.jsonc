@@ -1,0 +1,134 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // AXET-only: native V2 subagent delegation resolves the model from `agents` below.
+  // No provider or model fallback is permitted.
+  "default_agent": "sdlc-orchestrator",
+
+  // Explicit V2 plugin loading is required by the installed 2.0.23 runtime.
+  // Do not use the legacy singular `plugin` key.
+  "plugins": [
+    "./.opencode/plugins/sdlc-tools-v2",
+    "./.opencode/plugins/sdlc-graph-ui"
+  ],
+
+  // OpenCode resolves a subagent model from this authoritative configuration
+  // when it is launched through the native V2 `subagent` tool. Keep this in sync
+  // with .sdlc/config/models.json; frontmatter alone is not a routing policy.
+  // V2 applies global rules first; the orchestrator's agent-specific exception
+  // below is the only permission that can launch an SDLC child session.
+  "permissions": [
+    { "action": "subagent", "resource": "*", "effect": "deny" }
+  ],
+  "agents": {
+    "sdlc-orchestrator": {
+      "model": "axet/gpt-5.6-terra",
+      "permissions": [
+        { "action": "execute", "resource": "*", "effect": "allow" },
+        { "action": "subagent", "resource": "sdlc-*", "effect": "allow" },
+        { "action": "sdlc_*", "resource": "*", "effect": "allow" }
+      ]
+    },
+    "sdlc-repo-scout": { "model": "axet/gpt-5.6-luna" },
+    "sdlc-direct": { "model": "axet/gpt-5.6-luna" },
+    "sdlc-requirements": { "model": "axet/gpt-5.6-terra" },
+    "sdlc-architect": { "model": "axet/eu.anthropic.claude-sonnet-5" },
+    "sdlc-test-designer": { "model": "axet/gpt-5.4-2026-03-05" },
+    "sdlc-planner": { "model": "axet/gpt-5.6-terra" },
+    "sdlc-developer": { "model": "axet/gpt-5.3-codex" },
+    "sdlc-test-engineer": { "model": "axet/gpt-5.4-2026-03-05" },
+    "sdlc-reviewer": { "model": "axet/eu.anthropic.claude-sonnet-5" },
+    "sdlc-security": { "model": "axet/eu.anthropic.claude-sonnet-4-6" },
+    "sdlc-performance": { "model": "axet/gpt-5.4-2026-03-05" },
+    "sdlc-devops": { "model": "axet/gpt-5.3-codex" },
+    "sdlc-docs": { "model": "axet/gpt-5.4-mini" },
+    "sdlc-debugger": { "model": "axet/gpt-5.3-codex" },
+    "sdlc-judge": { "model": "axet/gpt-5.6-terra" }
+  },
+
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 12000
+  },
+
+  "watcher": {
+    "ignore": [
+      ".git/**",
+      "node_modules/**",
+      "vendor/**",
+      "dist/**",
+      "build/**",
+      "target/**",
+      "bin/**",
+      "obj/**",
+      ".next/**",
+      ".nuxt/**",
+      ".venv/**",
+      "venv/**",
+      "coverage/**",
+      ".sdlc/backups/**",
+      ".sdlc/runs/**/evidence/raw/**"
+    ]
+  },
+
+  "permission": {
+    "*": "ask",
+
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "**/.env": "deny",
+      "**/.env.*": "deny",
+      "*.env.example": "allow",
+      "**/.env.example": "allow"
+    },
+
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "lsp": "allow",
+    "skill": "allow",
+    "sdlc_*": "allow",
+    "external_directory": "deny",
+    "doom_loop": "ask",
+
+    "bash": {
+      "*": "ask",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git show*": "allow",
+      "git ls-files*": "allow",
+
+      "*rm -rf*": "deny",
+      "*rm -fr*": "deny",
+      "git push*": "deny",
+      "git commit*": "deny",
+      "git reset --hard*": "deny",
+      "git clean -f*": "deny",
+      "git checkout -- *": "deny",
+      "git restore --source*": "deny",
+      "npm publish*": "deny",
+      "pnpm publish*": "deny",
+      "yarn npm publish*": "deny",
+      "dotnet nuget push*": "deny",
+      "twine upload*": "deny",
+      "cargo publish*": "deny",
+      "docker push*": "deny",
+      "docker system prune*": "deny",
+      "kubectl apply*": "deny",
+      "kubectl delete*": "deny",
+      "helm upgrade*": "deny",
+      "helm uninstall*": "deny",
+      "terraform apply*": "deny",
+      "terraform destroy*": "deny",
+      "pulumi up*": "deny",
+      "pulumi destroy*": "deny",
+      "az * delete*": "deny",
+      "aws * delete*": "deny",
+      "gcloud * delete*": "deny"
+    }
+  }
+}

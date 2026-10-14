@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AXET Flows Mock Login</title>
+  <script>
+    (function () {
+      'use strict';
+
+      try {
+        window.localStorage.clear();
+      } catch (error) {
+        console.warn('[login.html] Could not clear localStorage', error);
+      }
+
+      try {
+        window.sessionStorage.clear();
+      } catch (error) {
+        console.warn('[login.html] Could not clear sessionStorage', error);
+      }
+
+      const targetUrl = new URL('index.html', window.location.href);
+      window.location.replace(targetUrl.toString());
+    })();
+  </script>
+</head>
+<body></body>
+</html>

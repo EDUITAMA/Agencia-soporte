@@ -1,0 +1,20 @@
+{
+  "name": "support-guard-mock-host",
+  "version": "0.0.20",
+  "private": true,
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": ">=22.22.3 <23",
+    "npm": "10.x"
+  },
+  "scripts": {
+    "build": "npm run build --prefix angular-app",
+    "build:watch": "cd angular-app && npm run build:watch",
+    "serve:mock": "npx -y live-server --port=4200 --no-browser --watch=dist,index.html,login.html,project.html,data-mock.js .",
+    "mock:proxy": "node mock-server/projects-proxy.mjs",
+    "dev": "npx -y concurrently \"npm run serve:mock\" \"npm run mock:proxy\" \"npm run build:watch\"",
+    "dev:real": "node -e \"console.error('Disabled: ng serve is not supported for this template. Use the mock host instead: npm run dev'); process.exit(1)\"",
+    "dev:stop": "node ../../scripts/stop-dev.mjs live-server \"ng build\" \"ng serve\" projects-proxy",
+    "test": "npm run test --prefix angular-app"
+  }
+}

@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "autonomy": {
+    "mode": "guarded-auto",
+    "maxRepairLoops": 2,
+    "continueWithoutHumanWhenEvidenceIsSufficient": true,
+    "stopConditions": [
+      "ambiguous business decision that changes externally visible behavior",
+      "missing credential, secret, license, permission, environment or external dependency",
+      "production deployment or publication",
+      "destructive or irreversible data or infrastructure operation",
+      "critical security or compliance risk",
+      "conflicting acceptance criteria",
+      "repair budget exhausted"
+    ]
+  },
+  "graphEngine": {
+    "enabled": true,
+    "deliveryModes": [
+      "PLAN_BUILD"
+    ],
+    "maxRepairCycles": 3,
+    "maxReviewCycles": 2,
+    "technicalRetries": "tracked separately from functional repair cycles; no blind retry after timeout"
+  },
+  "riskProfiles": {
+    "LOW": {
+      "examples": [
+        "documentation-only change",
+        "localized refactor with unchanged behavior",
+        "small defect with an existing regression-test location"
+      ],
+      "requiredChecks": [
+        "tests",
+        "review",
+        "docs"
+      ],
+      "recommendedTestLevels": [
+        "focused-unit",
+        "regression"
+      ]
+    },
+    "MEDIUM": {
+      "examples": [
+        "new behavior inside one bounded component",
+        "changes across several modules",
+        "new endpoint without sensitive data",
+        "dependency update with application impact"
+      ],
+      "requiredChecks": [
+        "tests",
+        "review",
+        "security",
+        "docs"
+      ],
+      "recommendedTestLevels": [
+        "unit",
+        "integration",
+        "contract",
+        "regression"
+      ]
+    },
+    "HIGH": {
+      "examples": [
+        "authentication or authorization",
+        "payments, personal or regulated data",
+        "database schema or migration",
+        "distributed workflow, concurrency or idempotency",
+        "public API compatibility",
+        "infrastructure, release or runtime configuration",
+        "performance-critical path"
+      ],
+      "requiredChecks": [
+        "tests",
+        "review",
+        "security",
+        "performance",
+        "devops",
+        "docs"
+      ],
+      "recommendedTestLevels": [
+        "unit",
+        "integration",
+        "contract",
+        "end-to-end",
+        "negative-security",
+        "performance",
+        "regression"
+      ]
+    },
+    "CRITICAL": {
+      "examples": [
+        "irreversible migration",
+        "production incident remediation with broad blast radius",
+        "safety-critical or highly regulated behavior",
+        "automatic production deployment"
+      ],
+      "requiredChecks": [
+        "tests",
+        "review",
+        "security",
+        "performance",
+        "devops",
+        "docs",
+        "human-approval"
+      ],
+      "recommendedTestLevels": [
+        "all-applicable"
+      ],
+      "automaticFinalApproval": false
+    }
+  },
+  "quality": {
+    "preferExistingRepositoryStandards": true,
+    "failOnExistingBuildOrTestRegression": true,
+    "warningsPolicy": "do not introduce new warnings; explain unavoidable existing warnings",
+    "coverage": {
+      "useRepositoryThresholdWhenPresent": true,
+      "measureChangedBehaviorFirst": true,
+      "defaultMinimumLinePercentWhenNoPolicyExists": 80,
+      "defaultMinimumBranchPercentWhenNoPolicyExists": 75,
+      "highRiskChangedCodeLineTarget": 90,
+      "highRiskChangedCodeBranchTarget": 85,
+      "coverageAloneNeverProvesAdequacy": true
+    },
+    "mutationTesting": {
+      "requiredOnlyWhenAlreadyConfiguredOrHighRiskAndPractical": true,
+      "doNotAddHeavyDependencyWithoutJustification": true
+    },
+    "staticAnalysis": {
+      "runExistingLintTypecheckAndAnalyzers": true,
+      "doNotSilenceFindingsWithoutRootCause": true
+    }
+  },
+  "testing": {
+    "principles": [
+      "trace every acceptance criterion to at least one verification",
+      "test behavior and contracts rather than implementation details",
+      "cover boundaries, invalid input, failure modes, authorization, concurrency and recovery when relevant",
+      "prefer deterministic isolated tests and record unavoidable environmental dependencies",
+      "do not weaken or delete a valid test merely to obtain a passing suite"
+    ],
+    "requiredEvidence": [
+      "exact command",
+      "exit code or explicit result",
+      "scope executed",
+      "failures and diagnosis",
+      "skipped tests and reason",
+      "coverage or equivalent confidence evidence when available"
+    ]
+  },
+  "tokenEconomy": {
+    "strategy": "risk-adaptive-lazy-context",
+    "readRepositoryProfileBeforeBroadExploration": true,
+    "searchBeforeRead": true,
+    "preferDiffAndRelevantRanges": true,
+    "loadSkillsOnDemand": true,
+    "doNotRepeatArtifactsInChat": true,
+    "parallelizeIndependentAudits": true,
+    "rerunOnlyImpactedChecks": true,
+    "defaultArtifactSummaryWords": 200,
+    "defaultSubagentReturnWords": 350,
+    "largeFileReadLineLimit": 250,
+    "commandOutputPolicy": "capture the smallest output that proves success or explains failure"
+  },
+  "safety": {
+    "neverRead": [
+      "secrets",
+      "private keys",
+      "real environment files",
+      "credential stores"
+    ],
+    "neverAutomatic": [
+      "production deployment",
+      "package publication",
+      "git push or merge",
+      "destructive migration",
+      "cloud resource creation or deletion",
+      "data deletion",
+      "permission escalation"
+    ],
+    "allowedAutomaticScope": "changes and verification inside the current worktree, subject to explicit deny rules"
+  },
+  "resilience": {
+    "projectRootSource": "OpenCode context via sdlc_project_context; never provider process cwd",
+    "blindRetryAfterTimeout": false,
+    "checkpointEveryStage": true,
+    "recoverBeforeReexecute": true,
+    "maxDeliberateMutatingStageReexecution": 1,
+    "stageCompletionMustBePersistedBeforeNextStage": true,
+    "finalResponseMustBeConcise": true
+  }
+}

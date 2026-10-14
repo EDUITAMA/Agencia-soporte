@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "notes": "Leave values null for automatic discovery. Set only when repository conventions cannot be inferred reliably.",
+  "commands": {
+    "bootstrap": null,
+    "formatCheck": null,
+    "formatWrite": null,
+    "lint": null,
+    "typecheck": null,
+    "build": null,
+    "unitTest": null,
+    "integrationTest": null,
+    "contractTest": null,
+    "e2eTest": null,
+    "coverage": null,
+    "mutationTest": null,
+    "securityScan": null,
+    "dependencyAudit": null,
+    "performanceTest": null
+  },
+  "paths": {
+    "source": [],
+    "tests": [],
+    "documentation": [],
+    "infrastructure": [],
+    "generated": []
+  },
+  "constraints": []
+}

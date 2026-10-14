@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/opencode-sdlc/state.schema.json",
+  "title": "OpenCode SDLC run state",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "id",
+    "title",
+    "status",
+    "stage",
+    "riskLevel",
+    "requiredChecks",
+    "repairLoops",
+    "maxRepairLoops",
+    "gates",
+    "artifacts",
+    "history",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "id": {"type": "string", "pattern": "^[a-zA-Z0-9._-]+$"},
+    "title": {"type": "string", "minLength": 1},
+    "status": {"enum": ["ACTIVE", "APPROVED", "BLOCKED", "CANCELLED"]},
+    "stage": {
+      "enum": [
+        "intake",
+        "discovery",
+        "requirements",
+        "design",
+        "planning",
+        "implementation",
+        "verification",
+        "repair",
+        "judgment",
+        "complete"
+      ]
+    },
+    "riskLevel": {"enum": ["UNCLASSIFIED", "LOW", "MEDIUM", "HIGH", "CRITICAL"]},
+    "requiredChecks": {
+      "type": "array",
+      "items": {"enum": ["tests", "review", "security", "performance", "devops", "docs", "human-approval"]},
+      "uniqueItems": true
+    },
+    "repairLoops": {"type": "integer", "minimum": 0},
+    "maxRepairLoops": {"type": "integer", "minimum": 0, "maximum": 10},
+    "gates": {"type": "object"},
+    "artifacts": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "history": {"type": "array"},
+    "createdAt": {"type": "string", "format": "date-time"},
+    "updatedAt": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": true
+}

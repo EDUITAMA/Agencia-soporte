@@ -1,0 +1,226 @@
+// Runtime handlers for the OpenCode V2 SDLC plugin.  This module deliberately
+// has no dependency on the legacy V1 `tool()` helper.  Graph behavior remains
+// in graph/*; these handlers only provide the V2-facing persistence boundary.
+import { promises as fs } from "node:fs"
+import path from "node:path"
+import crypto from "node:crypto"
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
+import { classifyRequest, buildRoutingDecision } from "./routing.mjs"
+import { createActivityEvent, formatActivity, reconcileModel } from "./activity.mjs"
+import { createGraphState, startNode, applyNodeResult, resumeGraph, recordTechnicalRetry } from "./graph/graph-engine.mjs"
+import { loadGraphState, saveGraphState } from "./graph/state-store.mjs"
+import { parseNodeResult } from "./graph/node-result.mjs"
+
+const execFileAsync = promisify(execFile)
+const now = () => new Date().toISOString()
+const projectRoot = (context) => path.resolve(context.worktree || context.directory)
+const sdlcRoot = (context) => path.join(projectRoot(context), ".sdlc")
+const safeSegment = (value, label) => {
+  if (!value || !/^[A-Za-z0-9._-]+$/.test(value)) throw new Error(`${label} must contain only letters, numbers, dot, underscore or hyphen`)
+  return value
+}
+const runDirectory = (context, runId) => path.join(sdlcRoot(context), "runs", safeSegment(runId, "runId"))
+const exists = async (target) => fs.access(target).then(() => true).catch(() => false)
+const readJson = async (target) => JSON.parse(await fs.readFile(target, "utf8"))
+
+async function writeJsonAtomic(target, value) {
+  await fs.mkdir(path.dirname(target), { recursive: true })
+  const temporary = `${target}.${process.pid}.${Date.now()}.tmp`
+  await fs.writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8")
+  await fs.rename(temporary, target)
+}
+
+async function resolveRunId(context, runId) {
+  if (runId && runId !== "current") return safeSegment(runId, "runId")
+  const pointer = await readJson(path.join(sdlcRoot(context), "current-run.json"))
+  return safeSegment(pointer.runId, "current runId")
+}
+
+async function loadRun(context, requestedRunId) {
+  const runId = await resolveRunId(context, requestedRunId)
+  const statePath = path.join(runDirectory(context, runId), "state.json")
+  if (!(await exists(statePath))) throw new Error(`Run state not found: ${runId}`)
+  return { runId, runDir: runDirectory(context, runId), statePath, state: await readJson(statePath) }
+}
+
+async function graphConfiguration(context) {
+  const policy = await readJson(path.join(sdlcRoot(context), "config", "policy.json"))
+  const graph = policy.graphEngine || {}
+  return {
+    enabled: graph.enabled === true,
+    deliveryModes: Array.isArray(graph.deliveryModes) ? graph.deliveryModes : ["PLAN_BUILD"],
+    maxRepairCycles: Number.isInteger(graph.maxRepairCycles) ? graph.maxRepairCycles : 3,
+    maxReviewCycles: Number.isInteger(graph.maxReviewCycles) ? graph.maxReviewCycles : 2,
+  }
+}
+
+async function graphSelections(context) {
+  const models = await readJson(path.join(sdlcRoot(context), "config", "models.json"))
+  const roles = { PLAN: "sdlc-planner", IMPLEMENT: "sdlc-developer", TEST: "sdlc-test-engineer", REPAIR: "sdlc-developer", REVIEW: "sdlc-reviewer" }
+  return Object.fromEntries(Object.entries(roles).map(([node, agent]) => [node, { agent, selectedModel: models[agent] || null, configuredModel: models[agent] || null, actualModel: null }]))
+}
+
+export async function prepareHostGraphRun({ title, request, riskHint = "LOW", resume = false }, context) {
+  if (resume) {
+    try {
+      const runId = await resolveRunId(context, "current")
+      const directory = runDirectory(context, runId)
+      const graph = await loadGraphState(directory)
+      if (graph.status === "RUNNING") return {
+        runId,
+        runDirectory: directory,
+        workspace: projectRoot(context),
+        request: String(request),
+        selections: graph.selections,
+        limits: graph.limits,
+        resume: true,
+      }
+    } catch { /* No resumable graph exists; create a new run below. */ }
+  }
+  const created = await createRun({ title, request, riskHint }, context)
+  const config = await graphConfiguration(context)
+  if (!config.enabled || !config.deliveryModes.includes("PLAN_BUILD")) throw new Error("Graph SDLC is not enabled for PLAN_BUILD")
+  return {
+    runId: created.runId,
+    runDirectory: runDirectory(context, created.runId),
+    workspace: projectRoot(context),
+    request: String(request),
+    selections: await graphSelections(context),
+    limits: config,
+    resume: false,
+  }
+}
+
+function optionalArray(value, field) {
+  if (!value || !String(value).trim()) return []
+  try {
+    const parsed = JSON.parse(value)
+    if (!Array.isArray(parsed)) throw new Error("must be an array")
+    return parsed
+  } catch (error) {
+    throw new Error(`${field} must be a JSON array: ${error.message}`)
+  }
+}
+
+function slugify(value) {
+  return String(value || "work").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 42) || "work"
+}
+
+async function projectContext(_input, context) {
+  const root = projectRoot(context)
+  let gitRoot = null
+  try {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "--show-toplevel"], { cwd: root, windowsHide: true, timeout: 5000, maxBuffer: 256 * 1024 })
+    gitRoot = String(stdout || "").trim() || null
+  } catch {}
+  return { projectRoot: root, gitRoot, contextDirectory: context.directory || null, contextWorktree: context.worktree || null, hasSdlc: await exists(path.join(root, ".sdlc")), hasOpenCode: await exists(path.join(root, ".opencode")) }
+}
+
+async function createRun(input, context) {
+  if (!String(input.request || "").trim()) throw new Error("Request cannot be empty")
+  const root = sdlcRoot(context)
+  const timestamp = now().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z")
+  let runId = `${timestamp}-${slugify(input.title)}`
+  let runDir = path.join(root, "runs", runId)
+  if (await exists(runDir)) { runId = `${runId}-${crypto.randomBytes(2).toString("hex")}`; runDir = path.join(root, "runs", runId) }
+  await fs.mkdir(path.join(runDir, "evidence", "raw"), { recursive: true })
+  await fs.writeFile(path.join(runDir, "00-request.md"), `# Work Request\n\n- Run ID: ${runId}\n- Created: ${now()}\n- Initial risk hint: ${input.riskHint || "UNCLASSIFIED"}\n\n## Original Request\n\n${String(input.request).trim()}\n`, "utf8")
+  const state = { schemaVersion: 1, id: runId, title: String(input.title || "work").trim(), projectRoot: projectRoot(context), stageExecutions: {}, status: "ACTIVE", stage: "intake", riskLevel: "UNCLASSIFIED", requiredChecks: [], repairLoops: 0, maxRepairLoops: 2, gates: {}, artifacts: ["00-request.md"], createdAt: now(), updatedAt: now(), history: [{ at: now(), event: "run-created", riskHint: input.riskHint || "UNCLASSIFIED" }] }
+  await writeJsonAtomic(path.join(runDir, "state.json"), state)
+  await writeJsonAtomic(path.join(root, "current-run.json"), { runId, updatedAt: now() })
+  return { runId, runDir: path.relative(projectRoot(context), runDir), state }
+}
+
+async function graphStart(input, context) {
+  const { runId, runDir } = await loadRun(context, input.runId)
+  const config = await graphConfiguration(context)
+  if (!config.enabled || !config.deliveryModes.includes(input.deliveryMode)) throw new Error(`Graph SDLC is not enabled for delivery mode ${input.deliveryMode}`)
+  try { const current = await loadGraphState(runDir); return { runId, resumed: true, status: current.status, currentNode: current.currentNode, activeAgent: current.activeAgent, selectedModel: current.selectedModel } } catch (error) { if (error?.code !== "ENOENT") throw error }
+  const state = createGraphState({ runId, deliveryMode: input.deliveryMode, limits: config, selections: await graphSelections(context) })
+  await saveGraphState(runDir, state, state.history)
+  return { runId, graphStatus: state.status, currentNode: state.currentNode, activeAgent: state.activeAgent, selectedModel: state.selectedModel, activity: "[Graph] START â†’ PLAN" }
+}
+
+async function graphNodeStarted(input, context) {
+  const { runId, runDir } = await loadRun(context, input.runId)
+  const state = await loadGraphState(runDir); const before = state.history.length
+  startNode(state); await saveGraphState(runDir, state, state.history.slice(before))
+  return { runId, node: state.currentNode, agent: state.activeAgent, selectedModel: state.selectedModel, configuredModel: state.selections?.[state.currentNode]?.configuredModel || null, actualModel: null, activity: `[Node] ${state.currentNode}` }
+}
+
+async function graphNodeResult(input, context) {
+  const { runId, runDir } = await loadRun(context, input.runId)
+  const state = await loadGraphState(runDir); const before = state.history.length
+  const output = applyNodeResult(state, { node: input.node, status: input.status, summary: input.summary, evidence: optionalArray(input.evidenceJson, "evidenceJson"), findings: optionalArray(input.findingsJson, "findingsJson"), failureClass: input.failureClass }, { actualModel: input.actualModel })
+  await saveGraphState(runDir, state, state.history.slice(before))
+  return { runId, node: output.result.node, gate: state.gates, transition: output.transition, graphStatus: state.status, currentNode: state.currentNode, activeAgent: state.activeAgent, selectedModel: state.selectedModel, repairCycles: state.cycles.repair, reviewCycles: state.cycles.review, activity: `[Transition] ${output.result.node} â†’ ${state.currentNode}` }
+}
+
+async function graphResume(input, context) {
+  const { runId, runDir } = await loadRun(context, input.runId); const state = await loadGraphState(runDir); const before = state.history.length
+  resumeGraph(state); await saveGraphState(runDir, state, state.history.slice(before))
+  return { runId, graphStatus: state.status, currentNode: state.currentNode, activeAgent: state.activeAgent, selectedModel: state.selectedModel, activity: `[Graph] RESUMED â†’ ${state.currentNode}` }
+}
+
+async function graphTechnicalRetry(input, context) {
+  const { runId, runDir } = await loadRun(context, input.runId); const state = await loadGraphState(runDir); const before = state.history.length
+  recordTechnicalRetry(state, { reason: input.reason, attempt: input.attempt }); await saveGraphState(runDir, state, state.history.slice(before))
+  return { runId, node: state.currentNode, technicalRetries: state.cycles.technicalRetry, repairCycles: state.cycles.repair, activity: `[Retry] ${state.currentNode} attempt ${input.attempt || state.cycles.technicalRetry}` }
+}
+
+async function graphStatus(input, context) {
+  const { runId, runDir } = await loadRun(context, input.runId); const state = await loadGraphState(runDir)
+  return { runId, deliveryMode: state.deliveryMode, state: state.status, currentNode: state.currentNode, previousNode: state.previousNode, cycles: state.cycles, limits: state.limits, gates: state.gates, selections: state.selections, lastFailure: state.lastFailure, updatedAt: state.updatedAt }
+}
+
+async function resolveModelRouting(input, context) {
+  const models = await readJson(path.join(sdlcRoot(context), "config", "models.json"))
+  const decision = buildRoutingDecision(classifyRequest(input.request), models._executionProfiles)
+  const event = { event: "ORCHESTRATOR_DECISION", projectRoot: projectRoot(context), ...decision }
+  if (input.runId) await fs.appendFile(path.join(runDirectory(context, input.runId), "15-model-routing.jsonl"), `${JSON.stringify(event)}\n`, "utf8")
+  return event
+}
+
+async function applyModels(_input, context) {
+  const root = projectRoot(context)
+  const mapping = await readJson(path.join(sdlcRoot(context), "config", "models.json"))
+  let output
+  try {
+    output = await execFileAsync(process.platform === "win32" ? "opencode.cmd" : "opencode", ["models"], { shell: process.platform === "win32", cwd: root, windowsHide: true, timeout: 30000, maxBuffer: 4 * 1024 * 1024 })
+  } catch (error) {
+    throw new Error(`Unable to list OpenCode models automatically: ${error?.message || error}. Run 'opencode models' manually and verify providers are connected.`)
+  }
+  const available = String(output.stdout || "").split(/\r?\n/).map((line) => line.trim().split(/\s+/)[0]).filter((model) => /^[^/\s]+\/[^\s]+$/.test(model))
+  const requested = Object.entries(mapping).filter(([agent]) => !agent.startsWith("_")).map(([agent, model]) => ({ agent, model: String(model || "").trim() }))
+  const unresolved = requested.filter(({ model }) => !available.includes(model))
+  if (mapping._strictNoFallback === true && unresolved.length) throw new Error(`Strict model routing blocked. Unresolved=${JSON.stringify(unresolved)}. No fallback model was used.`)
+  return { strictNoFallback: mapping._strictNoFallback === true, availableModelCount: available.length, resolved: requested.filter(({ model }) => available.includes(model)), unresolved, changed: [], inherited: [], ambiguous: [], missingAgents: [], note: "V2 validation does not rewrite agent files; opencode.jsonc remains authoritative." }
+}
+
+async function recordModelExecution(input, context) {
+  const reconciliation = reconcileModel({ selectedModel: input.requestedModel, configuredModel: input.configuredModel, actualModel: input.actualModel })
+  const event = { event: "MODEL_EXECUTION_START", selectedModel: input.requestedModel, configuredModel: input.configuredModel, actualModel: input.actualModel || null, agent: input.agent, phase: input.phase, reconciliation }
+  await fs.appendFile(path.join(runDirectory(context, input.runId), "15-model-routing.jsonl"), `${JSON.stringify(event)}\n`, "utf8")
+  return event
+}
+
+async function activityEvent(input, context) {
+  const level = String(process.env.ORCHESTRATOR_LOG_LEVEL || "normal").toLowerCase() === "debug" ? "debug" : "normal"
+  const event = createActivityEvent({ ...input, correlation: { bridgeSessionId: input.bridgeSessionId, requestId: input.requestId, orchestratorRunId: input.runId } })
+  await fs.appendFile(path.join(runDirectory(context, input.runId), "16-orchestrator-activity.jsonl"), `${JSON.stringify(event)}\n`, "utf8")
+  return formatActivity(event, level)
+}
+
+const HANDLERS = {
+  project_context: projectContext, create_run: createRun, graph_start: graphStart, graph_node_started: graphNodeStarted,
+  graph_parse_node_result: async (input) => parseNodeResult(input.childResponse, input.expectedNode), graph_node_result: graphNodeResult,
+  graph_resume: graphResume, graph_technical_retry: graphTechnicalRetry, graph_status: graphStatus,
+  apply_models: applyModels, resolve_model_routing: resolveModelRouting, record_model_execution: recordModelExecution, activity_event: activityEvent,
+}
+
+export async function executeSdlcV2(legacyName, input, context) {
+  const handler = HANDLERS[legacyName]
+  if (!handler) throw new Error(`SDLC V2 handler is not implemented for ${legacyName}; do not silently fall back to the V1 runtime.`)
+  return handler(input, context)
+}

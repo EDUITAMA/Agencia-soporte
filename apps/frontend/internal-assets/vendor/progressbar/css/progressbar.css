@@ -1,0 +1,50 @@
+div[ref="component"] > div > svg[viewBox],
+div[aria-labelledby="exampleModalLabel"] > div.modal-dialog > div > svg[viewBox]{
+    margin: 0 auto !important;
+    border-radius: 10px !important;
+}
+
+div[ref="component"] > div > svg[viewBox] ~ div.progressbar-text,
+div[aria-labelledby="exampleModalLabel"] > div.modal-dialog > div > svg[viewBox] ~ div.progressbar-text{
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.flexDataGrid {
+    overflow: scroll !important;
+    height: auto !important;
+    width: 100% !important;
+}
+
+.flexDataGrid table {
+    width: 100% !important;
+}
+
+.flexDataGrid table thead tr th {
+    width: 225px !important;
+}
+
+.flexDataGrid::-webkit-scrollbar {
+    width: 5px;
+}
+
+.flexDataGrid::-webkit-scrollbar:horizontal {
+    height: 7px;
+}
+
+.flexDataGrid::-webkit-scrollbar-track {
+    background: #ffffff;
+}
+
+.flexDataGrid::-webkit-scrollbar-thumb {
+    background: rgb(200, 200, 200);
+    border-radius: 5px;
+    display: block;
+}
+
+/* Reset background-color modal */
+/* .modal-backdrop.show {
+    opacity: 0 !important;
+} */

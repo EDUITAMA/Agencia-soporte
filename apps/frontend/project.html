@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <title>AXET Flows Mock Project Selection</title>
+  <link href="assets/vendor/fontawesome-free/css/all.min.css" rel="stylesheet" type="text/css">
+  <link href="assets/css/sb-admin.css" rel="stylesheet">
+  <style>
+    body {
+      min-height: 100vh;
+      margin: 0;
+      background:
+        linear-gradient(180deg, rgba(236, 241, 246, 0.95), rgba(255, 255, 255, 0.98)),
+        #f7f9fb;
+      color: #1f2a44;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .mock-project-page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mock-project-main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 16px 96px;
+    }
+
+    .mock-project-shell {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+    }
+
+    .mock-project-card {
+      width: min(100%, 612px);
+      background: #ffffff;
+      border: 1px solid #cfe0ef;
+      border-radius: 8px;
+      box-shadow: 0 18px 48px rgba(22, 44, 78, 0.08);
+      overflow: hidden;
+    }
+
+    .mock-project-header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 18px 24px;
+      background: #eef4f8;
+      border-bottom: 1px solid #cfe0ef;
+      font-size: 22px;
+      font-weight: 500;
+      text-align: center;
+    }
+
+    .mock-project-body {
+      padding: 22px 18px 18px;
+    }
+
+    .mock-project-select {
+      height: 52px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      border-color: #d2dbe6;
+      font-size: 18px;
+    }
+
+    .mock-project-submit,
+    .mock-project-actions .btn {
+      height: 52px;
+      border-radius: 8px;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .mock-project-submit {
+      background: #08112f;
+      border-color: #08112f;
+    }
+
+    .mock-project-submit:hover,
+    .mock-project-submit:focus {
+      background: #111c45;
+      border-color: #111c45;
+    }
+
+    .mock-project-error {
+      margin: 0 0 18px;
+      color: #7f1d1d;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    .mock-project-actions {
+      display: grid;
+      gap: 12px;
+    }
+
+    .mock-project-footer {
+      padding: 14px 24px;
+      border-top: 1px solid #cfe0ef;
+      background: #eef4f8;
+      color: #90a2b6;
+      font-size: 14px;
+      text-align: center;
+    }
+
+    .mock-project-site-footer {
+      padding: 18px 16px;
+      color: #213250;
+      font-size: 14px;
+      text-align: center;
+    }
+
+    @media (max-width: 767px) {
+      .mock-project-main {
+        align-items: flex-start;
+        padding-top: 24px;
+      }
+
+      .mock-project-header {
+        font-size: 18px;
+      }
+
+      .mock-project-select,
+      .mock-project-submit,
+      .mock-project-actions .btn {
+        font-size: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="mock-project-page">
+    <main class="mock-project-main">
+      <div id="projectSelectionRoot" aria-live="polite"></div>
+    </main>
+    <footer class="mock-project-site-footer">Powered by aXet.flows © 2026 NTT Data. All Rights Reserved</footer>
+  </div>
+
+  <script src="data-mock.js"></script>
+</body>
+</html>
