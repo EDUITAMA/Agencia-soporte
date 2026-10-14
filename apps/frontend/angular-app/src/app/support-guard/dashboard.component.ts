@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, output } from "@a
 
 import type { AuditEntry, ViewName } from "./models";
 import { SupportGuardService } from "./support-guard.service";
-import { activityText, formatDate } from "./ui";
+import { activityText, digestActivity, formatDate, type CaseDigest } from "./ui";
 
 @Component({
   selector: "sg-dashboard",
@@ -145,27 +145,43 @@ import { activityText, formatDate } from "./ui";
 
       <section class="sg-panel" aria-labelledby="recent-title">
         <div class="sg-panel__head">
-          <h2 id="recent-title">Actividad reciente de validación</h2>
+          <div>
+            <h2 id="recent-title">Casos que requieren atención</h2>
+            <p class="sg-muted">Estado más reciente de cada caso revisado. Los que necesitan acción aparecen primero.</p>
+          </div>
           <button type="button" class="sg-link" (click)="svc.refresh()">Actualizar</button>
         </div>
         @if (!overview() && svc.loading()) {
           @for (row of [1, 2, 3]; track row) { <div class="sg-skeleton sg-skeleton--row"></div> }
-        } @else if ((overview()?.recentActivity?.length ?? 0) === 0) {
+        } @else if (digest().length === 0) {
           <div class="sg-state">
-            <h3>Sin actividad todavía</h3>
+            <h3>Sin casos revisados todavía</h3>
             <p>Ejecute “Validar casos nuevos” para registrar la primera revisión.</p>
           </div>
         } @else {
-          <ul class="sg-activity">
-            @for (entry of overview()!.recentActivity; track $index) {
+          <div class="sg-digest__summary">
+            <span class="sg-chip">{{ digest().length }} caso(s) revisado(s)</span>
+            <span class="sg-chip sg-chip--warn">{{ attentionCount() }} requieren atención</span>
+            <span class="sg-chip sg-chip--ok">{{ digest().length - attentionCount() }} sin pendientes</span>
+          </div>
+          <ul class="sg-digest">
+            @for (d of shown(); track d.caseId) {
               <li>
-                <span class="sg-activity__time">{{ date(entry.timestamp) }}</span>
-                <span class="sg-activity__case">{{ entry.caseId }}</span>
-                <span class="sg-activity__action">{{ auditLabel(entry) }}</span>
-                <span class="sg-activity__result">{{ entry.action.startsWith('AI_') ? (entry.model ?? '') : entry.result }}</span>
+                <button type="button" class="sg-digest__row" (click)="open.emit(d.caseId)" [attr.aria-label]="'Abrir caso ' + d.caseId">
+                  <span class="sg-activity__case">{{ d.caseId }}</span>
+                  <span class="sg-digest__tags">
+                    @if (d.validation; as v) { <span class="sg-chip" [class.sg-chip--ok]="v.tone === 'ok'" [class.sg-chip--warn]="v.tone !== 'ok'">Información: {{ v.label }}</span> }
+                    @if (d.sufficiency; as s) { <span class="sg-chip" [class.sg-chip--ok]="s.tone === 'ok'" [class.sg-chip--warn]="s.tone !== 'ok'">Suficiencia: {{ s.label }}</span> }
+                    @if (d.action) { <span class="sg-chip">{{ d.action }}</span> }
+                    @if (d.hasError) { <span class="sg-chip sg-chip--warn">Error al procesar</span> }
+                  </span>
+                  <span class="sg-digest__detail">@if (d.missing.length) { Falta: {{ d.missing.slice(0, 3).join(', ') }}@if (d.missing.length > 3) { y {{ d.missing.length - 3 }} más } }</span>
+                  <span class="sg-activity__time">{{ date(d.lastAt) }}</span>
+                </button>
               </li>
             }
           </ul>
+          @if (digest().length > shown().length) { <p class="sg-muted">Mostrando {{ shown().length }} de {{ digest().length }}. Consulta el resto en “Validación de casos”.</p> }
         }
       </section>
     }
@@ -174,8 +190,16 @@ import { activityText, formatDate } from "./ui";
 export class DashboardComponent {
   protected readonly svc = inject(SupportGuardService);
   readonly navigate = output<ViewName>();
+  readonly open = output<string>();
   protected readonly overview = this.svc.overview;
   protected readonly date = formatDate;
+  protected readonly digest = computed(() => {
+    const needs = (d: CaseDigest) => (d.hasError ? 0 : d.validation?.tone === "warn" ? 1 : d.sufficiency && d.sufficiency.tone !== "ok" ? 2 : 3);
+    return digestActivity(this.overview()?.recentActivity ?? []).sort((a, b) => needs(a) - needs(b));
+  });
+  protected readonly needsAttention = (d: CaseDigest) => d.hasError || d.validation?.tone === "warn" || (!!d.sufficiency && d.sufficiency.tone !== "ok");
+  protected readonly attentionCount = computed(() => this.digest().filter(this.needsAttention).length);
+  protected readonly shown = computed(() => this.digest().slice(0, 8));
 
   protected readonly connectionLabel = computed(() => {
     const state = this.overview()?.connection.state;

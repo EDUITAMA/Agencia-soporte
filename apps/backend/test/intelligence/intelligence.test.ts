@@ -244,6 +244,27 @@ test("AI reuse: an existing result for the same cluster snapshot is not recomput
   assert.equal(llm.total, spent, "un run recalculado con los mismos datos reutiliza los resultados de IA");
 });
 
+test("discard: soft-deletes a run so the period can be redone; forceAi re-calls the AI; role activity is readable", async () => {
+  const { service, llm } = await buildSpy();
+  const { runId } = await service.start({ type: "MONTHLY" }, { wait: true });
+  await service.analyze(runId, { mode: "TOP_RCA" }, { wait: true });
+  const spent = llm.total;
+  const activity = (await service.roleActivity(runId))!;
+  assert.ok(activity.length > 0 && activity.every((group) => group.roles.length > 0));
+
+  const forced = await service.estimate(runId, { mode: "TOP_RCA", forceAi: true });
+  assert.ok(forced.selected.every((item) => !item.willReuse));
+  await service.analyze(runId, { mode: "TOP_RCA", forceAi: true }, { wait: true });
+  assert.ok(llm.total > spent, "forceAi vuelve a llamar a la IA");
+
+  await service.discardRun(runId);
+  assert.equal((await service.lookup({ type: "MONTHLY" })).state, "NOT_FOUND");
+  assert.equal((await service.getRun(runId))?.status, "DISCARDED", "el run se conserva en el almacén");
+  await assert.rejects(() => service.discardRun(runId));
+  const redo = await service.start({ type: "MONTHLY" }, { wait: true });
+  assert.notEqual(redo.runId, runId);
+});
+
 test("execute requires a prepared run and the AI stage never starts by itself", async () => {
   const { service, llm } = await buildSpy();
   await assert.rejects(service.analyze("run_inexistente", { mode: "SUMMARY" }), RunStateError);

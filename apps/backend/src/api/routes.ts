@@ -84,7 +84,7 @@ export function createSupportGuardRouter(deps: SupportGuardDeps): Router {
       },
       lastRun,
       autoValidation: scheduler.status(lastRun?.finishedAt ?? null),
-      recentActivity: store.recentAudit(10),
+      recentActivity: store.recentAudit(200),
       config: toPublicConfig(config),
     });
   });

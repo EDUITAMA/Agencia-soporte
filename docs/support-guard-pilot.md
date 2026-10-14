@@ -47,6 +47,8 @@ Niveles: patrón observado → hipótesis → candidato; la confianza refleja co
 ## Validación humana
 `POST /analysis/:id/reviews` (VALIDATED / PARTIALLY_VALIDATED / REJECTED / NEEDS_MORE_EVIDENCE + revisor + comentario), historial append-only, `GET /reviews/metrics`. Mide criterio de revisores, **no** precisión de la IA. No retroalimenta nada automáticamente. Paquete: `GET /analysis/:id/review-pack?format=md` → `docs\support-guard-review-pack.md`.
 
+**Descartar recorrido y re-análisis.** `POST /analysis/:id/discard` marca el recorrido como `DISCARDED` (borrado lógico: no elimina filas; se rechaza si está en curso) y permite prepararlo de nuevo. `forceAi: true` en `/estimate` y `/execute` ignora los resultados guardados y vuelve a ejecutar a los especialistas (consume tokens). `GET /analysis/:id/roles` muestra por grupo qué especialista corrió, se reutilizó u omitió (sin señales), su resumen, el veredicto del validador, la causa raíz candidata y el conteo de hallazgos y recomendaciones.
+
 ## Limitaciones conocidas
 1. **Clasificación**: `customfield_10705` es el Rank de Jira; no hay campo de categoría poblado → dimensión oculta (ver diccionario de datos).
 2. `errorMessage`, `closeMessage`, `equipmentId` son banners estáticos → se descartan; calidad de datos POOR y causas raíz débiles.

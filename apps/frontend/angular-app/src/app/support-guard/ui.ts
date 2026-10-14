@@ -126,6 +126,55 @@ export function aiDisplay(record: CaseRecord): { value: string; label: string } 
 
 const AI_RESULT_LABEL: Record<string, string> = { SUFFICIENT: "Suficiente", PARTIALLY_SUFFICIENT: "Parcialmente suficiente", INSUFFICIENT: "Insuficiente" };
 
+export interface CaseDigest {
+  caseId: string;
+  lastAt: string;
+  validation: { label: string; tone: "ok" | "warn" | "danger" } | null;
+  sufficiency: { label: string; tone: "ok" | "warn" | "danger" } | null;
+  action: string | null;
+  missing: string[];
+  hasError: boolean;
+}
+
+const SUFF_TONE: Record<string, "ok" | "warn" | "danger"> = { SUFFICIENT: "ok", PARTIALLY_SUFFICIENT: "warn", INSUFFICIENT: "danger" };
+
+/** Collapses the raw audit trail (newest first) into one row per case with its latest outcome. */
+export function digestActivity(entries: AuditEntry[]): CaseDigest[] {
+  const byCase = new Map<string, CaseDigest>();
+  for (const e of entries) {
+    if (!e.caseId || e.caseId === "-") continue;
+    let d = byCase.get(e.caseId);
+    if (!d) byCase.set(e.caseId, (d = { caseId: e.caseId, lastAt: e.timestamp, validation: null, sufficiency: null, action: null, missing: [], hasError: false }));
+    switch (e.action) {
+      case "CASE_VALIDATED":
+        d.validation ??= e.result === "COMPLETE" ? { label: "Completo", tone: "ok" } : { label: "Incompleto", tone: "warn" };
+        break;
+      case "CASE_MISSING_FIELDS":
+        if (!d.missing.length) d.missing = e.result.split(",").filter(Boolean);
+        d.validation ??= { label: "Incompleto", tone: "warn" };
+        break;
+      case "SUFFICIENCY_EVALUATED":
+      case "AI_ANALYSIS_COMPLETED":
+      case "AI_ANALYSIS_REUSED": {
+        const status = e.result.split(" ")[0] ?? e.result;
+        if (AI_RESULT_LABEL[status]) d.sufficiency ??= { label: AI_RESULT_LABEL[status], tone: SUFF_TONE[status] ?? "warn" };
+        break;
+      }
+      case "CASE_RETURN_DRY_RUN":
+        d.action ??= "Devolución simulada";
+        break;
+      case "CASE_RETURNED":
+        d.action ??= "Devuelto al solicitante";
+        break;
+      case "JIRA_ERROR":
+      case "AI_ANALYSIS_FAILED":
+        d.hasError = true;
+        break;
+    }
+  }
+  return [...byCase.values()];
+}
+
 /** Human sentence for the activity feed. */
 export function activityText(entry: AuditEntry): string {
   switch (entry.action) {

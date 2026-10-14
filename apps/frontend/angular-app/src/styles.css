@@ -52,6 +52,23 @@ button {
   padding: 24px 32px;
 }
 
+.brand-group { display: flex; align-items: center; gap: 18px; min-width: 0; }
+.brand-group .brand { padding-left: 18px; border-left: 1px solid var(--line, #dfe5ee); }
+.ntt-logo { display: block; height: 30px; width: auto; flex: none; }
+.ntt-logo--login { height: 34px; margin: 0 auto 18px; }
+.ntt-logo--small { height: 22px; align-self: flex-start; }
+.app-footer { max-width: 1200px; margin: 24px auto 0; padding: 24px 32px 32px; border-top: 1px solid var(--line, #dfe5ee); display: flex; flex-direction: column; gap: 8px; color: var(--ink-muted, #5b6678); font-size: .85rem; }
+.app-footer p { margin: 0; max-width: 70ch; line-height: 1.5; }
+.app-footer__legal { font-size: .78rem; }
+@media (max-width: 640px) {
+  .topbar { padding: 16px; }
+  .brand-group { gap: 10px; }
+  .brand-group .brand { padding-left: 10px; font-size: .95rem; }
+  .ntt-logo { height: 22px; }
+  .brand-group .brand__mark { display: none; }
+  .app-footer { padding: 20px 16px 24px; }
+}
+
 .brand {
   display: inline-flex;
   align-items: center;

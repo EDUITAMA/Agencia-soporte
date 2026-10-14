@@ -24,7 +24,7 @@ function executeRequest(source: unknown): ExecuteRequest {
   const mode = String(body.mode ?? "").toUpperCase() as AnalysisMode;
   if (!ANALYSIS_MODES.includes(mode)) throw new SelectionError(`Modo de análisis inválido: ${String(body.mode)}`);
   const clusterIds = Array.isArray(body.clusterIds) ? body.clusterIds.filter((id): id is string => typeof id === "string") : undefined;
-  return { mode, clusterIds, includeLowConfidence: body.includeLowConfidence === true };
+  return { mode, clusterIds, includeLowConfidence: body.includeLowConfidence === true, forceAi: body.forceAi === true };
 }
 
 /** Read-only analytical API. Nothing here writes to Jira. */
@@ -75,6 +75,17 @@ export function createIntelligenceRouter(service: IntelligenceService): Router {
     if (body.confirm !== true) return fail(response, 400, "CONFIRMATION_REQUIRED", "Confirme explícitamente antes de ejecutar el análisis con IA");
     const result = await service.analyze(String(request.params.id), executeRequest(body));
     response.status(202).json({ runId: result.runId, mode: result.selection.mode, selected: result.selection.selected.map((item) => item.id), estimate: result.estimate });
+  }));
+
+  router.post("/analysis/:id/discard", guard(async (request, response) => {
+    await service.discardRun(String(request.params.id));
+    response.json({ id: String(request.params.id), status: "DISCARDED" });
+  }));
+
+  router.get("/analysis/:id/roles", guard(async (request, response) => {
+    const groups = await service.roleActivity(String(request.params.id));
+    if (!groups) return fail(response, 404, "NOT_FOUND", "Análisis no encontrado");
+    response.json({ groups });
   }));
 
   router.get("/analysis", guard(async (_request, response) => response.json({ runs: await service.listRuns() })));

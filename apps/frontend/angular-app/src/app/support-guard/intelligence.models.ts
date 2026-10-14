@@ -11,6 +11,23 @@ export interface ResolvedPeriod {
   warnings: string[];
 }
 
+export interface RoleActivityGroup {
+  clusterId: string;
+  title: string;
+  roles: { role: string; status: string; reason: string | null; durationMs: number; rawClaims: number; verifiedClaims: number; model: string; summary: string | null }[];
+  validation: Record<string, number>;
+  findings: number;
+  recommendations: number;
+  topCandidate: { title: string; description: string; confidence: number; status: string } | null;
+}
+
+export interface RunEvent {
+  ts: string;
+  level: "INFO" | "WARN" | "ERROR";
+  phase: string;
+  message: string;
+}
+
 export interface RunProgress {
   phase: string;
   percent: number;

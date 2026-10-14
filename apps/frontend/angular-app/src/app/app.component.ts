@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/cor
 
 import { ApiService } from "./api.service";
 import { AxetSessionService, type AxetSession } from "./axet-session.service";
+import { NTT_LOGO } from "./ntt-logo";
 import { WorkspaceComponent } from "./support-guard/workspace.component";
 
 type ConnectionState = "Checking" | "Connected" | "Unavailable";
@@ -18,6 +19,7 @@ type ConnectionState = "Checking" | "Connected" | "Unavailable";
     } @else if (!session()) {
       <main class="login-shell">
         <section class="login-card" aria-labelledby="login-title">
+          <img class="ntt-logo ntt-logo--login" [src]="logo" alt="NTT DATA" />
           <span class="brand__mark" aria-hidden="true">SG</span>
           <h1 id="login-title">Support Guard</h1>
           <p>
@@ -30,10 +32,13 @@ type ConnectionState = "Checking" | "Connected" | "Unavailable";
     } @else {
     <main class="application-shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="Support Guard home">
-          <span class="brand__mark" aria-hidden="true">SG</span>
-          <span>Support Guard</span>
-        </a>
+        <div class="brand-group">
+          <img class="ntt-logo" [src]="logo" alt="NTT DATA" />
+          <a class="brand" href="/" aria-label="Support Guard home">
+            <span class="brand__mark" aria-hidden="true">SG</span>
+            <span>Support Guard</span>
+          </a>
+        </div>
         <div class="topbar__status">
           <span class="status-dot" [class.status-dot--online]="connectionState() === 'Connected'"></span>
           <span>Plataforma {{ connectionText() }}</span>
@@ -44,6 +49,12 @@ type ConnectionState = "Checking" | "Connected" | "Unavailable";
       </header>
 
       <sg-workspace />
+
+      <footer class="app-footer">
+        <img class="ntt-logo ntt-logo--small" [src]="logo" alt="NTT DATA" />
+        <p>Support Guard es una solución desarrollada por <strong>NTT DATA</strong> para Banco de Occidente. Control inteligente de calidad para casos de soporte; solo lectura sobre Jira.</p>
+        <p class="app-footer__legal">© {{ year }} NTT DATA, Inc. Todos los derechos reservados · Uso interno y confidencial.</p>
+      </footer>
     </main>
     }
   `,
@@ -52,6 +63,8 @@ type ConnectionState = "Checking" | "Connected" | "Unavailable";
 export class AppComponent {
   readonly connectionState = signal<ConnectionState>("Checking");
   readonly connectionText = () => ({ Checking: "verificando", Connected: "conectada", Unavailable: "no disponible" })[this.connectionState()];
+  readonly logo = NTT_LOGO;
+  readonly year = new Date().getFullYear();
   readonly session = signal<AxetSession | null>(null);
   readonly sessionState = signal<"resolving" | "resolved">("resolving");
   readonly redirecting = signal(false);

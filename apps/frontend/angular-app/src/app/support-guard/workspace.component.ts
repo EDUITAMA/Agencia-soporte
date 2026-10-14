@@ -23,7 +23,7 @@ import { ValidationViewComponent } from "./validation-view.component";
       </nav>
       <main class="sg-main">
         @switch (view()) {
-          @case ('home') { <sg-dashboard (navigate)="view.set($event)" /> }
+          @case ('home') { <sg-dashboard (navigate)="view.set($event)" (open)="selected.set($event)" /> }
           @case ('validation') { <sg-validation-view (open)="selected.set($event)" /> }
           @case ('sufficiency') { <sg-sufficiency-view (open)="selected.set($event)" /> }
           @case ('analyst') { <sg-analyst-preview /> }

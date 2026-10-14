@@ -29,10 +29,11 @@ export interface ExecuteRequest {
   mode: AnalysisMode;
   clusterIds?: string[];
   includeLowConfidence?: boolean;
+  /** Explicit re-analysis: ignores stored AI results for the selected groups. */
+  forceAi?: boolean;
 }
 
-interface AnalysisPlan {
-  selection: SelectionResult;
+interface AnalysisPlan {  selection: SelectionResult;
   estimate: WorkloadEstimate;
   period: ResolvedPeriod;
   previousStatus: string;
@@ -279,7 +280,7 @@ export class IntelligenceService {
     const clusters = await this.selectable(runId);
     const selection = resolveSelection(clusters, request, config.ai.maxClusters);
     const reusable = new Set<string>();
-    if (config.ai.enabled && selection.depth !== "NONE") {
+    if (config.ai.enabled && selection.depth !== "NONE" && !request.forceAi) {
       for (const cluster of selection.selected) {
         if (await this.cacheGet(this.aiKeys(cluster.id, await this.snapshotOf(runId, cluster.id), selection.depth))) reusable.add(cluster.id);
       }
@@ -359,7 +360,7 @@ export class IntelligenceService {
             }
             const snapshot = await this.snapshotOf(runId, cluster.id);
             const keys = this.aiKeys(cluster.id, snapshot, depth);
-            const cached = await this.cacheGet<ClusterAnalysis>(keys);
+            const cached = plan.request.forceAi ? undefined : await this.cacheGet<ClusterAnalysis>(keys);
             let analysis: ClusterAnalysis;
             let key = keys[keys.length - 1];
             if (cached) {
@@ -370,7 +371,7 @@ export class IntelligenceService {
               await this.event(runId, "INFO", "AI_ANALYSIS_REUSED", `${cluster.id}: resultado existente reutilizado`);
             } else {
               await this.event(runId, "INFO", "AI_ANALYSIS_STARTED", `${cluster.id} (${cluster.members.length} casos, ${depth})`);
-              analysis = depth === "DEEP" ? await this.pipeline.analyze(cluster, unitMap, { event: (level, phase, message) => this.event(runId, level, phase, message) }) : await this.analyzer.labelOnly(cluster, unitMap);
+              analysis = depth === "DEEP" ? await this.pipeline.analyze(cluster, unitMap, { event: (level, phase, message) => this.event(runId, level, phase, message), bypassCache: plan.request.forceAi }) : await this.analyzer.labelOnly(cluster, unitMap);
               stats.calls += analysis.calls.length;
               stats.skipped += analysis.deep?.counts.reusedRoles ?? 0;
               stats.analyzed++;
@@ -985,6 +986,47 @@ export class IntelligenceService {
   async overview() {
     const latest = await this.deps.store.queryOne(`SELECT id FROM analysis_runs WHERE status IN ('PREPARED','COMPLETED','PARTIAL') ORDER BY started_at DESC LIMIT 1`);
     return { enabled: this.deps.config.enabled, source: this.deps.source.mode, ai: { enabled: this.deps.config.ai.enabled, provider: this.deps.config.ai.provider, models: this.deps.config.ai.models }, activeRunId: this.activeRunId ?? null, latestRunId: latest ? s(latest.id) : null, readOnly: true };
+  }
+
+  /** Soft delete: the run leaves reuse lookups so the period can be redone; every row stays in the store for audit. */
+  async discardRun(runId: string): Promise<void> {
+    const row = await this.deps.store.queryOne(`SELECT status FROM analysis_runs WHERE id = ?`, [runId]);
+    if (!row) throw new RunStateError("Análisis no encontrado");
+    if (this.activeRunId === runId || !["PREPARED", "COMPLETED", "PARTIAL", "FAILED", "INTERRUPTED"].includes(s(row.status))) throw new RunStateError("El análisis está en curso o ya fue descartado");
+    await this.deps.store.run(`UPDATE analysis_runs SET status = 'DISCARDED' WHERE id = ?`, [runId]);
+    await this.event(runId, "INFO", "RUN_DISCARDED", `Estado anterior: ${s(row.status)}. Los datos se conservan; el periodo puede prepararse de nuevo.`);
+  }
+
+  /** Specialist activity per group for the whole run (read-only, no AI). */
+  async roleActivity(runId: string) {
+    const id = await this.effectiveId(runId);
+    if (!id) return undefined;
+    const rows = await this.deps.store.query(
+      `SELECT r.cluster_id, c.title, r.role, r.status, r.reason, r.duration_ms, r.raw_claims, r.verified_claims, r.model, r.summary FROM role_runs r LEFT JOIN clusters c ON c.run_id = r.run_id AND c.id = r.cluster_id WHERE r.run_id = ? ORDER BY c.case_count DESC, r.cluster_id, r.role`,
+      [id],
+    );
+    const validations = await this.deps.store.query(`SELECT cluster_id, verdict, COUNT(*) AS n FROM claim_validations WHERE run_id = ? GROUP BY cluster_id, verdict`, [id]);
+    const findings = await this.deps.store.query(`SELECT cluster_id, COUNT(*) AS n FROM consolidated_findings WHERE run_id = ? GROUP BY cluster_id`, [id]);
+    const recommendations = await this.deps.store.query(`SELECT cluster_id, COUNT(*) AS n FROM cluster_recommendations WHERE run_id = ? GROUP BY cluster_id`, [id]);
+    const candidates = await this.deps.store.query(`SELECT cluster_id, title, description, confidence, status FROM rootcause_candidates WHERE run_id = ? ORDER BY confidence DESC`, [id]);
+    type Group = { clusterId: string; title: string; roles: unknown[]; validation: Record<string, number>; findings: number; recommendations: number; topCandidate: { title: string; description: string; confidence: number; status: string } | null };
+    const groups = new Map<string, Group>();
+    for (const row of rows) {
+      const key = s(row.cluster_id);
+      if (!groups.has(key)) groups.set(key, { clusterId: key, title: s(row.title), roles: [], validation: {}, findings: 0, recommendations: 0, topCandidate: null });
+      groups.get(key)?.roles.push({ role: s(row.role), status: s(row.status), reason: row.reason ? s(row.reason) : null, durationMs: Number(row.duration_ms ?? 0), rawClaims: Number(row.raw_claims ?? 0), verifiedClaims: Number(row.verified_claims ?? 0), model: s(row.model), summary: row.summary ? s(row.summary) : null });
+    }
+    for (const row of validations) {
+      const group = groups.get(s(row.cluster_id));
+      if (group) group.validation[s(row.verdict)] = Number(row.n);
+    }
+    for (const row of findings) { const group = groups.get(s(row.cluster_id)); if (group) group.findings = Number(row.n); }
+    for (const row of recommendations) { const group = groups.get(s(row.cluster_id)); if (group) group.recommendations = Number(row.n); }
+    for (const row of candidates) {
+      const group = groups.get(s(row.cluster_id));
+      if (group && !group.topCandidate) group.topCandidate = { title: s(row.title), description: s(row.description), confidence: Number(row.confidence ?? 0), status: s(row.status) };
+    }
+    return [...groups.values()];
   }
 
   /** Whether a completed run already covers this period (used by the scheduler). */

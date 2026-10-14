@@ -19,6 +19,8 @@ export interface RoleCache {
 
 export interface Hooks {
   event?: (level: "INFO" | "WARN" | "ERROR", phase: string, message: string) => Promise<void> | void;
+  /** Ignores stored role results and calls the AI again (explicit user request only). */
+  bypassCache?: boolean;
 }
 
 export type RoleRunStatus = "QUEUED" | "RUNNING" | "COMPLETED" | "REUSED" | "FAILED" | "SKIPPED";
@@ -161,7 +163,7 @@ export class RolePipeline {
       const model = this.config.ai.models[definition.task];
       const base: RoleRun = { role: definition.id, task: definition.task, model, status: "QUEUED", reason: selected.reason, attempts: 0, durationMs: 0, promptVersion: promptVersionOf(definition.id), promptHash: sha(system).slice(0, 16), evidenceHash, rawClaims: 0, verifiedClaims: 0, missingInformation: [] };
       const key = sha({ kind: "ROLE", role: definition.id, evidence: evidenceHash, groups: segmentation.groups.map((group) => [group.id, group.kind]), prompt: base.promptVersion, promptHash: base.promptHash, model, pipeline: ANALYST_PIPELINE_VERSION });
-      const hit = (await this.cache?.get(key)) as RoleResult | undefined;
+      const hit = hooks.bypassCache ? undefined : ((await this.cache?.get(key)) as RoleResult | undefined);
       if (hit) {
         await emit("INFO", "AI_ROLE_REUSED", `${definition.id}: resultado existente reutilizado`);
         return { run: { ...base, status: "REUSED", rawClaims: hit.raw, verifiedClaims: hit.claims.length, summary: hit.summary, missingInformation: hit.missing, response: hit.response }, result: hit };
@@ -224,7 +226,7 @@ export class RolePipeline {
     if (this.config.ai.validationEnabled && allClaims.length) {
       const validatePayload = { claims: allClaims.map((claim) => ({ id: claim.id, role: claim.role, claim: claim.claim, level: claim.level, failureGroupId: claim.failureGroupId, evidence: claim.evidence })) };
       const key = sha({ kind: "VALIDATE", claims: validatePayload, model: this.config.ai.models.VALIDATE, prompt: ROLE_PROMPT_VERSIONS.VALIDATE, pipeline: ANALYST_PIPELINE_VERSION });
-      const hit = (await this.cache?.get(key)) as ClaimCheck[] | undefined;
+      const hit = hooks.bypassCache ? undefined : ((await this.cache?.get(key)) as ClaimCheck[] | undefined);
       if (hit) {
         checks = new Map(hit.map((check) => [check.claimId, check]));
         detail.validation = { status: "REUSED", model: this.config.ai.models.VALIDATE, checks: hit, durationMs: 0 };

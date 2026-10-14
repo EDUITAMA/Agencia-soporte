@@ -2,7 +2,7 @@ import { HttpClient, HttpErrorResponse } from "@angular/common/http";
 import { inject, Injectable, signal } from "@angular/core";
 import { firstValueFrom } from "rxjs";
 
-import type { AnalysisEstimate, AnalysisMode, AnalysisRun, CasePage, ClusterDetail, ClusterSummary, ComparisonReport, DataQualityReport, ExecutiveReport, PeriodLookup, PeriodType, PreAnalysis, ResolvedPeriod } from "./intelligence.models";
+import type { AnalysisEstimate, AnalysisMode, AnalysisRun, CasePage, ClusterDetail, ClusterSummary, ComparisonReport, DataQualityReport, ExecutiveReport, PeriodLookup, PeriodType, PreAnalysis, ResolvedPeriod, RoleActivityGroup, RunEvent } from "./intelligence.models";
 
 const BASE = "/api/support-guard/intelligence";
 const POLL_MS = 2500;
@@ -12,6 +12,7 @@ export interface ObjectiveRequest {
   mode: AnalysisMode;
   clusterIds?: string[];
   includeLowConfidence?: boolean;
+  forceAi?: boolean;
 }
 
 export interface PeriodSelection {
@@ -31,6 +32,7 @@ export class IntelligenceService {
   readonly preview = signal<ResolvedPeriod | null>(null);
   readonly runs = signal<AnalysisRun[]>([]);
   readonly run = signal<AnalysisRun | null>(null);
+  readonly events = signal<RunEvent[]>([]);
   readonly clusters = signal<ClusterSummary[]>([]);
   readonly executive = signal<ExecutiveReport | null>(null);
   readonly quality = signal<DataQualityReport | null>(null);
@@ -47,6 +49,7 @@ export class IntelligenceService {
   readonly pre = signal<PreAnalysis | null>(null);
   readonly estimate = signal<AnalysisEstimate | null>(null);
   readonly loadingDetail = signal(false);
+  readonly roles = signal<RoleActivityGroup[]>([]);
 
   get running(): boolean {
     const status = this.run()?.status;
@@ -133,6 +136,8 @@ export class IntelligenceService {
   }
 
   private clearResults(): void {
+    this.roles.set([]);
+    this.events.set([]);
     this.clusters.set([]);
     this.executive.set(null);
     this.quality.set(null);
@@ -146,10 +151,12 @@ export class IntelligenceService {
   async select(runId: string): Promise<void> {
     clearTimeout(this.timer);
     try {
-      const { run } = await firstValueFrom(this.http.get<{ run: AnalysisRun }>(`${BASE}/analysis/${runId}`));
+      const { run, events } = await firstValueFrom(this.http.get<{ run: AnalysisRun; events: RunEvent[] }>(`${BASE}/analysis/${runId}`));
       if (this.run()?.id !== run.id) this.clearResults();
       this.run.set(run);
+      this.events.set(events ?? []);
       if (ACTIVE.has(run.status)) {
+        void this.loadRoles(runId);
         this.timer = setTimeout(() => void this.select(runId), POLL_MS);
         return;
       }
@@ -191,6 +198,32 @@ export class IntelligenceService {
     }
   }
 
+  private async loadRoles(runId: string): Promise<void> {
+    try {
+      this.roles.set((await firstValueFrom(this.http.get<{ groups: RoleActivityGroup[] }>(`${BASE}/analysis/${runId}/roles`))).groups);
+    } catch {
+      this.roles.set([]);
+    }
+  }
+
+  /** Soft delete: the stored run is kept for audit but leaves reuse, so the period can be prepared again. */
+  async discard(): Promise<boolean> {
+    const target = this.run()?.id ?? this.lookup()?.run?.id;
+    if (!target || this.running) return false;
+    try {
+      await firstValueFrom(this.http.post(`${BASE}/analysis/${target}/discard`, {}));
+      clearTimeout(this.timer);
+      this.run.set(null);
+      this.clearResults();
+      await this.loadRuns();
+      this.error.set(null);
+      return true;
+    } catch (error) {
+      this.error.set(this.message(error, "No fue posible descartar el análisis."));
+      return false;
+    }
+  }
+
   private async loadResults(runId: string): Promise<void> {
     const get = <T>(path: string) => firstValueFrom(this.http.get<T>(`${BASE}/analysis/${runId}/${path}`));
     const [clusters, executive, quality, comparison, pre] = await Promise.all([
@@ -205,6 +238,7 @@ export class IntelligenceService {
     this.quality.set(quality.content);
     this.comparison.set(comparison.content);
     this.pre.set(pre);
+    await this.loadRoles(runId);
     this.staleBlocked.set(false);
     await this.loadCases({ page: 1 });
   }
@@ -215,6 +249,7 @@ export class IntelligenceService {
     this.loadingDetail.set(true);
     try {
       this.detail.set(await firstValueFrom(this.http.get<ClusterDetail>(`${BASE}/analysis/${run.id}/clusters/${clusterId}`)));
+      globalThis.scrollTo?.({ top: 0 });
     } catch (error) {
       this.error.set(this.message(error, "No fue posible cargar el grupo."));
     } finally {
